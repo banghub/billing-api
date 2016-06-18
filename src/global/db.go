@@ -16,7 +16,7 @@ type dBConnection struct {
 
 // InitDB : init db from main
 func InitDB() {
-	core, err := sql.Open("mysql", "root:Wrathskunk@tcp(localhost:3306)/bill?charset=utf8&parseTime=True")
+	core, err := sql.Open("mysql", "root:[password]@tcp(localhost:3306)/bill?charset=utf8&parseTime=True")
 	if err != nil {
 		log.Printf("db.user not available, error : %s", err.Error())
 		log.Fatal("App exit")
