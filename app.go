@@ -5,28 +5,41 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
+	"goji.io"
+	"goji.io/pat"
+
 	"github.com/py150504/billingps/src/global"
 	"github.com/py150504/billingps/src/people"
+	"github.com/py150504/billingps/src/units"
+	"github.com/rs/cors"
 )
 
 func main() {
 	global.InitDB()
+	global.InitGlobal(os.Stderr)
 	people.InitPeople()
+	errUnit := units.InitUnit()
+	if errUnit != nil {
+		global.LogError.Fatalf(errUnit.Error())
+	}
 	log.Println("Run on : http://localhost:8080")
 
-	r := mux.NewRouter()
-	r.HandleFunc("/", global.Index)
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://www.billing.com:3000"},
+		AllowCredentials: true,
+		AllowedMethods:   []string{"GET", "POST", "DELETE", "PATCH"},
+	})
 
-	r.HandleFunc("/people", people.Read).Methods("GET")
-	r.HandleFunc("/people/{id}", people.ReadDetail).Methods("GET")
-	r.HandleFunc("/people", people.Create).Methods("POST")
-	r.HandleFunc("/people/{id}", people.Delete).Methods("DELETE")
+	mux := goji.NewMux()
+	mux.Use(corsHandler.Handler)
 
-	http.Handle("/", r)
-	r.NotFoundHandler = http.HandlerFunc(global.NotFound)
+	mux.HandleFuncC(pat.Get("/people"), people.Read)
+	mux.HandleFuncC(pat.Get("/people/:id"), people.ReadDetail)
+	mux.HandleFuncC(pat.Post("/people"), people.Create)
+	mux.HandleFuncC(pat.Delete("/people/:id"), people.Delete)
+	mux.HandleFuncC(pat.Patch("/people/:id"), people.Update)
 
-	loggedRouter := handlers.LoggingHandler(os.Stdout, r)
-	http.ListenAndServe(":8080", loggedRouter)
+	mux.HandleFuncC(pat.Get("/units"), units.Read)
+
+	http.ListenAndServe(":8080", mux)
 }

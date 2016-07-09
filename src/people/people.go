@@ -1,91 +1,27 @@
 package people
 
 import (
-	"database/sql"
-	"encoding/json"
+	"fmt"
 	"log"
-	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/gorilla/mux"
-	"github.com/gorilla/schema"
 	"github.com/py150504/billingps/src/global"
 )
 
 // Person : data type people
 type Person struct {
-	ID       int64     `schema:"-" json:"-"`
-	Name     string    `schema:"name" json:"name"`
-	Phone    string    `schema:"phone" json:"phone"`
-	JoinDate time.Time `schema:"-" json:"-"`
-	Status   int       `schema:"-" json:"-"`
-}
-
-var queryPerson preparedQueryPerson
-
-type preparedQueryPerson struct {
-	selectPeople *sql.Stmt
-	selectPerson *sql.Stmt
-	insertPerson *sql.Stmt
-	deletePerson *sql.Stmt
-}
-
-// InitPeople : prepare query
-func InitPeople() error {
-	db := global.DB.Core
-	var errPrepared error
-	queryPerson.selectPeople, errPrepared = db.Prepare(`
-		SELECT
-			id, name, phone, join_date
-		FROM
-			people
-		WHERE
-			status = 1`)
-	if errPrepared != nil {
-		log.Printf("Error prepare select people : %s", errPrepared.Error())
-		log.Fatal("App exit, fail Init People")
-	}
-	queryPerson.selectPerson, errPrepared = db.Prepare(`
-		SELECT
-			id, name, phone, join_date
-		FROM
-			people
-		WHERE
-			status = 1 AND
-			id = ?`)
-	if errPrepared != nil {
-		log.Printf("Error prepare select person : %s", errPrepared.Error())
-		log.Fatal("App exit, fail Init People")
-	}
-	queryPerson.insertPerson, errPrepared = db.Prepare(`
-		INSERT INTO 
-			people (name, phone, join_date, status)
-		VALUES 
-			(?, ?, ?, ?)`)
-
-	if errPrepared != nil {
-		log.Printf("Error prepare insert person : %s", errPrepared.Error())
-		log.Fatal("App exit, fail Init People")
-	}
-	queryPerson.deletePerson, errPrepared = db.Prepare(`
-		UPDATE people
-		SET
-			status = 0
-		WHERE
-			id = ?`)
-
-	if errPrepared != nil {
-		log.Printf("Error prepare delete person : %s", errPrepared.Error())
-		log.Fatal("App exit, fail Init People")
-	}
-	return nil
+	ID       int64     `json:"id"`
+	Name     string    `json:"name"`
+	Phone    string    `json:"phone"`
+	JoinDate time.Time `json:"-"`
+	Status   int       `json:"-"`
 }
 
 func (p *Person) save() error {
 	p.JoinDate = time.Now()
 	p.Status = 1
-	resultInsert, errInsert := queryPerson.insertPerson.Exec(p.Name, p.Phone, p.JoinDate, p.Status)
+	resultInsert, errInsert := queryPerson.insert.Exec(p.Name, p.Phone, p.JoinDate, p.Status)
 	if errInsert != nil {
 		log.Printf(errInsert.Error())
 		return nil
@@ -108,26 +44,44 @@ func (p *Person) load() error {
 		&p.JoinDate)
 
 	if errSelect != nil {
-		log.Printf(errSelect.Error())
-		return nil
+		global.LogError.Printf(errSelect.Error())
+		return errSelect
 	}
 
 	return nil
 }
 
 func (p *Person) delete() error {
-	resultDelete, errDelete := queryPerson.deletePerson.Exec(p.ID)
+	resultDelete, errDelete := queryPerson.delete.Exec(p.ID)
 	if errDelete != nil {
-		log.Printf(errDelete.Error())
-		return nil
+		global.LogError.Printf(errDelete.Error())
+		return errDelete
 	}
 	affectedRow, errResult := resultDelete.RowsAffected()
 	if errResult != nil {
-		log.Printf(errResult.Error())
-		return nil
+		global.LogError.Printf(errResult.Error())
+		return errResult
 	}
 	if affectedRow == 0 {
-		log.Printf("affected row: %d", affectedRow)
+		global.LogError.Printf(fmt.Sprintf("%d", affectedRow))
+		return nil
+	}
+	return nil
+}
+
+func (p *Person) update() error {
+	resultUpdate, errUpdate := queryPerson.update.Exec(p.Name, p.Phone, p.ID)
+	if errUpdate != nil {
+		global.LogError.Printf(errUpdate.Error())
+		return errUpdate
+	}
+	affectedRow, errResult := resultUpdate.RowsAffected()
+	if errResult != nil {
+		global.LogError.Printf(errResult.Error())
+		return errResult
+	}
+	if affectedRow == 0 {
+		global.LogError.Printf(fmt.Sprintf("%d", affectedRow))
 		return nil
 	}
 	return nil
@@ -143,23 +97,11 @@ func getPerson(id int64) *Person {
 
 func getPeople() []*Person {
 	people := []*Person{}
-	// db := global.DB.Core
-	// selectQuery, errPrepared := db.Prepare(`
-	// 	SELECT
-	// 		id, name, phone, join_date
-	// 	FROM
-	// 		people
-	// 	WHERE
-	// 		status = 1`)
-	// if errPrepared != nil {
-	// 	log.Printf(errPrepared.Error())
-	// }
 	rows, errSelect := queryPerson.selectPeople.Query()
-
+	defer rows.Close()
 	if errSelect != nil {
 		log.Printf(errSelect.Error())
 	}
-	defer rows.Close()
 	for rows.Next() {
 		person := new(Person)
 		errScan := rows.Scan(
@@ -172,86 +114,10 @@ func getPeople() []*Person {
 		}
 		people = append(people, person)
 	}
-	// queryPerson.selectPeople.Close()
 	return people
 }
 
-// Read : read people from id
-func Read(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	people := getPeople()
-	var data []interface{}
-	for _, person := range people {
-		data = append(data, MapPerson(person, true))
-	}
-	response := global.Response{
-		Links: r.URL.Path,
-		Data:  data}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// ReadDetail : read spesific people from id
-func ReadDetail(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/vnd.api+json")
-	vars := mux.Vars(r)
-	idString := vars["id"]
-	id, _ := strconv.ParseInt(idString, 10, 64)
-	person := getPerson(id)
-
-	response := global.Response{
-		Links: r.URL.Path,
-		Data:  MapPerson(person, true)}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Create : create people from input data
-func Create(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/vnd.api+json")
-	errParse := r.ParseForm()
-	if errParse != nil {
-		log.Printf(errParse.Error())
-		return
-	}
-
-	people := new(Person)
-	decoder := schema.NewDecoder()
-	errDecode := decoder.Decode(people, r.PostForm)
-	if errDecode != nil {
-		log.Printf(errDecode.Error())
-		return
-	}
-
-	errSave := people.save()
-	if errSave != nil {
-		log.Printf(errSave.Error())
-		return
-	}
-	response := MapPerson(people, true)
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
-}
-
-// Delete : delete people from id
-func Delete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/vnd.api+json")
-	vars := mux.Vars(r)
-	idString := vars["id"]
-	id, _ := strconv.ParseInt(idString, 10, 64)
-	person := new(Person)
-	person.ID = id
-	person.delete()
-
-	response := global.Response{
-		Data: MapPerson(person, false)}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// MapPerson : map person output as jsonapi.org
+// MapPerson : map person
 func MapPerson(p *Person, detail bool) interface{} {
 	var attributes interface{}
 	if detail {
