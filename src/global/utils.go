@@ -1,6 +1,7 @@
 package global
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -26,4 +27,12 @@ func NotFound(w http.ResponseWriter, r *http.Request) {
 func InitGlobal(errorHandle io.Writer) {
 	LogError = log.New(errorHandle,
 		"ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+}
+
+// FailResponse : respond with error
+func FailResponse(w http.ResponseWriter, err error) {
+	response := Response{
+		Errors: err.Error()}
+	w.WriteHeader(http.StatusInternalServerError)
+	json.NewEncoder(w).Encode(response)
 }

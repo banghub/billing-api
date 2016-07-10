@@ -47,7 +47,7 @@ func InitUnit() error {
 		INSERT INTO 
 			units (name, price, status)
 		VALUES 
-			(?, ?, ?)`)
+			(?, ?, 1)`)
 	if errPrepared != nil {
 		global.LogError.Println(errPrepared.Error())
 		return errPrepared

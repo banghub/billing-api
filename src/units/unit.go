@@ -1,6 +1,8 @@
 package units
 
 import (
+	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/py150504/billingps/src/global"
@@ -8,13 +10,25 @@ import (
 
 // Unit : data type unit
 type Unit struct {
-	ID     int64   `json:"id"`
+	ID     int64   `json:"-"`
 	Name   string  `json:"name"`
 	Price  float64 `json:"price"`
 	Status int64   `json:"-"`
 }
 
 func (u *Unit) save() error {
+	u.Status = 1
+	resultInsert, errInsert := queryUnit.insert.Exec(u.Name, u.Price)
+	if errInsert != nil {
+		global.LogError.Printf(errInsert.Error())
+		return errInsert
+	}
+	lastID, errResult := resultInsert.LastInsertId()
+	if errResult != nil {
+		global.LogError.Printf(errResult.Error())
+		return errResult
+	}
+	u.ID = lastID
 	return nil
 }
 func (u *Unit) load() error {
@@ -29,9 +43,38 @@ func (u *Unit) load() error {
 	return nil
 }
 func (u *Unit) delete() error {
+	resultDelete, errDelete := queryUnit.delete.Exec(u.ID)
+	if errDelete != nil {
+		global.LogError.Printf(errDelete.Error())
+		return errDelete
+	}
+	affectedRow, errResult := resultDelete.RowsAffected()
+	if errResult != nil {
+		global.LogError.Printf(errResult.Error())
+		return errResult
+	}
+	if affectedRow == 0 {
+		noRow := errors.New("No row affected")
+		global.LogError.Printf(noRow.Error())
+		return noRow
+	}
 	return nil
 }
 func (u *Unit) update() error {
+	resultUpdate, errUpdate := queryUnit.update.Exec(u.Name, u.Price, u.ID)
+	if errUpdate != nil {
+		global.LogError.Printf(errUpdate.Error())
+		return errUpdate
+	}
+	affectedRow, errResult := resultUpdate.RowsAffected()
+	if errResult != nil {
+		global.LogError.Printf(errResult.Error())
+		return errResult
+	}
+	if affectedRow == 0 {
+		global.LogError.Printf(fmt.Sprintf("%d", affectedRow))
+		return nil
+	}
 	return nil
 }
 
@@ -50,6 +93,7 @@ func getUnits() ([]*Unit, error) {
 	rows, errSelect := queryUnit.selectUnits.Query()
 	defer rows.Close()
 	if errSelect != nil {
+		global.LogError.Printf(errSelect.Error())
 		return units, errSelect
 	}
 	for rows.Next() {
@@ -59,6 +103,7 @@ func getUnits() ([]*Unit, error) {
 			&unit.Name,
 			&unit.Price)
 		if errScan != nil {
+			global.LogError.Printf(errScan.Error())
 			return units, errScan
 		}
 		units = append(units, unit)

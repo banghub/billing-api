@@ -1,29 +1,27 @@
-package people
+package units
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 
-	"github.com/py150504/billingps/src/global"
 	"goji.io/pat"
+
+	"github.com/py150504/billingps/src/global"
 	"golang.org/x/net/context"
 )
 
-// Read : read people from id
+// Read : read units list
 func Read(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	people, errGet := getPeople()
+	units, errGet := getUnits()
 	if errGet != nil {
-		global.LogError.Printf(errGet.Error())
 		global.FailResponse(w, errGet)
 	}
 	var data []interface{}
-	for _, person := range people {
-		data = append(data, MapPerson(person, true))
+	for _, unit := range units {
+		data = append(data, MapUnit(unit, true))
 	}
 	response := global.Response{
 		Links: r.URL.Path,
@@ -43,14 +41,14 @@ func ReadDetail(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		global.FailResponse(w, errParse)
 		return
 	}
-	person, errGet := getPerson(id)
-	if errGet != nil {
-		global.LogError.Printf(errGet.Error())
-		global.FailResponse(w, errGet)
+	unit, errPerson := getUnit(id)
+	if errPerson != nil {
+		global.FailResponse(w, errPerson)
 	}
+
 	response := global.Response{
 		Links: r.URL.Path,
-		Data:  MapPerson(person, true)}
+		Data:  MapUnit(unit, true)}
 
 	json.NewEncoder(w).Encode(response)
 }
@@ -61,27 +59,26 @@ func Create(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 
 	errParse := r.ParseForm()
 	if errParse != nil {
-		log.Printf(errParse.Error())
+		global.LogError.Printf(errParse.Error())
 		return
 	}
 
-	person := new(Person)
+	unit := new(Unit)
 	decoder := json.NewDecoder(r.Body)
-	errDecode := decoder.Decode(&person)
+	errDecode := decoder.Decode(&unit)
 	if errDecode != nil {
 		global.LogError.Printf(errDecode.Error())
 		global.FailResponse(w, errDecode)
 		return
 	}
 
-	errSave := person.save()
+	errSave := unit.save()
 	if errSave != nil {
-		global.LogError.Printf(errSave.Error())
 		global.FailResponse(w, errSave)
 		return
 	}
 	response := global.Response{
-		Data: MapPerson(person, true)}
+		Data: MapUnit(unit, true)}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
@@ -98,16 +95,15 @@ func Delete(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 		global.FailResponse(w, errParse)
 		return
 	}
-	person := new(Person)
-	person.ID = id
-	errDelete := person.delete()
+	unit := new(Unit)
+	unit.ID = id
+	errDelete := unit.delete()
 	if errDelete != nil {
-		global.LogError.Printf(errDelete.Error())
 		global.FailResponse(w, errDelete)
 		return
 	}
 	response := global.Response{
-		Data: MapPerson(person, false)}
+		Data: MapUnit(unit, false)}
 
 	json.NewEncoder(w).Encode(response)
 }
@@ -118,24 +114,33 @@ func Update(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 
 	errParse := r.ParseForm()
 	if errParse != nil {
-		log.Printf(errParse.Error())
+		global.LogError.Printf(errParse.Error())
+		return
+	}
+	idString := pat.Param(ctx, "id")
+	id, errParse := strconv.ParseInt(idString, 10, 64)
+	if errParse != nil {
+		global.LogError.Printf(errParse.Error())
+		global.FailResponse(w, errParse)
 		return
 	}
 
-	person := new(Person)
+	unit := new(Unit)
 	decoder := json.NewDecoder(r.Body)
-	errDecode := decoder.Decode(&person)
+	errDecode := decoder.Decode(&unit)
 	if errDecode != nil {
-		log.Printf(errDecode.Error())
+		global.LogError.Printf(errDecode.Error())
+		global.FailResponse(w, errDecode)
 		return
 	}
-	errUpdate := person.update()
+	unit.ID = id
+	errUpdate := unit.update()
 	if errUpdate != nil {
-		log.Printf(errUpdate.Error())
+		global.FailResponse(w, errUpdate)
 		return
 	}
 	response := global.Response{
-		Data: MapPerson(person, true)}
+		Data: MapUnit(unit, true)}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)

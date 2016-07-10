@@ -1,8 +1,8 @@
 package people
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -23,16 +23,15 @@ func (p *Person) save() error {
 	p.Status = 1
 	resultInsert, errInsert := queryPerson.insert.Exec(p.Name, p.Phone, p.JoinDate, p.Status)
 	if errInsert != nil {
-		log.Printf(errInsert.Error())
-		return nil
+		global.LogError.Printf(errInsert.Error())
+		return errInsert
 	}
 	lastID, errResult := resultInsert.LastInsertId()
 	if errResult != nil {
-		log.Printf(errResult.Error())
-		return nil
+		global.LogError.Printf(errResult.Error())
+		return errResult
 	}
 	p.ID = lastID
-
 	return nil
 }
 
@@ -81,26 +80,31 @@ func (p *Person) update() error {
 		return errResult
 	}
 	if affectedRow == 0 {
-		global.LogError.Printf(fmt.Sprintf("%d", affectedRow))
-		return nil
+		noRow := errors.New("No row affected")
+		global.LogError.Printf(noRow.Error())
+		return noRow
 	}
 	return nil
 }
 
-func getPerson(id int64) *Person {
+func getPerson(id int64) (*Person, error) {
 	person := new(Person)
 	person.ID = id
-	person.load()
-
-	return person
+	errLoad := person.load()
+	if errLoad != nil {
+		global.LogError.Printf(errLoad.Error())
+		return person, errLoad
+	}
+	return person, nil
 }
 
-func getPeople() []*Person {
+func getPeople() ([]*Person, error) {
 	people := []*Person{}
 	rows, errSelect := queryPerson.selectPeople.Query()
 	defer rows.Close()
 	if errSelect != nil {
-		log.Printf(errSelect.Error())
+		global.LogError.Printf(errSelect.Error())
+		return people, errSelect
 	}
 	for rows.Next() {
 		person := new(Person)
@@ -110,11 +114,12 @@ func getPeople() []*Person {
 			&person.Phone,
 			&person.JoinDate)
 		if errScan != nil {
-			log.Printf(errScan.Error())
+			global.LogError.Printf(errScan.Error())
+			return people, errScan
 		}
 		people = append(people, person)
 	}
-	return people
+	return people, nil
 }
 
 // MapPerson : map person

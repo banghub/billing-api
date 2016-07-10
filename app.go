@@ -40,6 +40,10 @@ func main() {
 	mux.HandleFuncC(pat.Patch("/people/:id"), people.Update)
 
 	mux.HandleFuncC(pat.Get("/units"), units.Read)
+	mux.HandleFuncC(pat.Get("/units/:id"), units.ReadDetail)
+	mux.HandleFuncC(pat.Post("/units"), units.Create)
+	mux.HandleFuncC(pat.Delete("/units/:id"), units.Delete)
+	mux.HandleFuncC(pat.Patch("/units/:id"), units.Update)
 
 	http.ListenAndServe(":8080", mux)
 }
